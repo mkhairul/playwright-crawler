@@ -72,21 +72,57 @@ ddev exec node crawler.js https://playwright-crawler.ddev.site/en-ca/ --same-pat
 ddev exec node crawler.js https://playwright-crawler.ddev.site --max-pages 500 --concurrency 5
 ```
 
+### Crawling Authenticated Sites (Login)
+
+You can crawl pages behind a login screen using either **Interactive/Manual** login or **Automated** login. Because pages in the same session share cookies and local storage, once logged in, the entire crawler will access the protected pages.
+
+#### 1. Interactive / Manual Login (Recommended for complex auth, SSO, MFA, or Captchas)
+If you omit username/password, the crawler automatically opens a browser window and pauses to let you log in manually. Once completed, press **[Enter]** in the terminal to begin crawling:
+
+```bash
+node crawler.js https://example.com/protected --login-url https://example.com/login
+```
+
+#### 2. Automated Login (Standard Username/Password forms)
+The crawler can automatically fill out username and password forms and submit them:
+
+```bash
+node crawler.js https://example.com/dashboard --login-url https://example.com/login --username "myuser" --password "mypassword"
+```
+
+If the login form uses custom CSS selectors, you can override them:
+```bash
+node crawler.js https://example.com/dashboard \
+  --login-url https://example.com/login \
+  --username "myuser" --password "mypassword" \
+  --user-selector "#email-input" \
+  --pass-selector "#password-input" \
+  --submit-selector "button.submit-btn"
+```
+
 ---
 
 ## Options
 
-| Flag               | Default | Description                                         |
-|--------------------|---------|-----------------------------------------------------|
-| `--max-pages <n>`  | `200`   | Stop after crawling n pages                         |
-| `--concurrency <n>`| `3`     | Number of parallel browser tabs                     |
-| `--same-domain`    | `true`  | Only follow links on the same domain                |
-| `--no-same-domain` | —       | Follow all links regardless of domain               |
-| `--same-path`      | `false` | Only follow links under starting URL's path/region  |
-| `--include-ext`    | —       | Extra file extensions to crawl (e.g. `.php,.asp`)   |
-| `--output <file>`  | auto    | Write CSV report to this filename                   |
-| `--timeout <ms>`   | `15000` | Navigation timeout per page (milliseconds)          |
-| `--no-headless`    | —       | Show the browser window while crawling              |
+| Flag                   | Default | Description                                         |
+|------------------------|---------|-----------------------------------------------------|
+| `--max-pages <n>`      | `200`   | Stop after crawling n pages                         |
+| `--concurrency <n>`    | `3`     | Number of parallel browser tabs                     |
+| `--same-domain`        | `true`  | Only follow links on the same domain                |
+| `--no-same-domain`     | —       | Follow all links regardless of domain               |
+| `--same-path`          | `false` | Only follow links under starting URL's path/region  |
+| `--include-ext`        | —       | Extra file extensions to crawl (e.g. `.php,.asp`)   |
+| `--output <file>`      | auto    | Write CSV report to this filename                   |
+| `--timeout <ms>`       | `15000` | Navigation timeout per page (milliseconds)          |
+| `--no-headless`        | —       | Show the browser window while crawling              |
+| `--ignore-https-errors`| `true`  | Ignore SSL/HTTPS certificate errors                |
+| `--no-ignore-https-errors`| —    | Force SSL/HTTPS certificate validation             |
+| `--login-url <url>`    | —       | URL of the login page to authenticate first         |
+| `--username <str>`     | —       | Username / Email for automated login                |
+| `--password <str>`     | —       | Password for automated login                        |
+| `--user-selector <sel>`| —       | Custom CSS selector for username input field        |
+| `--pass-selector <sel>`| —       | Custom CSS selector for password input field        |
+| `--submit-selector <sel>`| —       | Custom CSS selector for the login submit button     |
 
 ---
 

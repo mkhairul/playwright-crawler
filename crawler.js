@@ -13,6 +13,13 @@
  *   --output <file>      Write CSV report to file
  *   --timeout <ms>       Navigation timeout per page (default: 15000)
  *   --no-headless        Show browser window while crawling
+ *   --ignore-https-errors Ignore HTTPS/SSL certificate errors (default: true)
+ *   --login-url  <url>   Login page URL to authenticate first
+ *   --username   <str>   Username / email for automatic login
+ *   --password   <str>   Password for automatic login
+ *   --user-selector <sel> CSS selector for the username input
+ *   --pass-selector <sel> CSS selector for the password input
+ *   --submit-selector <sel> CSS selector for the login submit button
  */
 
 const { chromium } = require("playwright");
@@ -35,6 +42,13 @@ function parseArgs() {
     output: null,
     timeout: 15000,
     headless: true,
+    ignoreHttpsErrors: true,
+    loginUrl: null,
+    username: null,
+    password: null,
+    userSelector: null,
+    passSelector: null,
+    submitSelector: null,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -50,6 +64,14 @@ function parseArgs() {
       case "--output":       opts.output      = args[++i]; break;
       case "--timeout":      opts.timeout     = parseInt(args[++i], 10); break;
       case "--no-headless":  opts.headless    = false; break;
+      case "--ignore-https-errors": opts.ignoreHttpsErrors = true; break;
+      case "--no-ignore-https-errors": opts.ignoreHttpsErrors = false; break;
+      case "--login-url":       opts.loginUrl       = args[++i]; break;
+      case "--username":        opts.username        = args[++i]; break;
+      case "--password":        opts.password        = args[++i]; break;
+      case "--user-selector":   opts.userSelector   = args[++i]; break;
+      case "--pass-selector":   opts.passSelector   = args[++i]; break;
+      case "--submit-selector": opts.submitSelector = args[++i]; break;
       default: console.warn(`Unknown option: ${a}`);
     }
   }
@@ -316,16 +338,70 @@ async function main() {
   const opts = parseArgs();
   const startMs = Date.now();
 
+  // If loginUrl is specified but no credentials are, we must show the browser window for manual login
+  if (opts.loginUrl && (!opts.username || !opts.password)) {
+    opts.headless = false;
+  }
+
   printHeader(opts.startUrl);
 
   const browser = await chromium.launch({ headless: opts.headless });
   const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (compatible; PlaywrightSEOSpider/1.0; +https://github.com/playwright)",
-    ignoreHTTPSErrors: true,
+    ignoreHTTPSErrors: opts.ignoreHttpsErrors,
   });
 
-  // Intercept & abort images, fonts, media to speed up crawl
+  // ─────────────────────────────────────────────
+  //  Optional Authentication / Login Step
+  // ─────────────────────────────────────────────
+  if (opts.loginUrl) {
+    console.log(c.bold + c.yellow + `\n🔑 Initiating login session at: ${opts.loginUrl}` + c.reset);
+    const loginPage = await context.newPage();
+    try {
+      await loginPage.goto(opts.loginUrl, { waitUntil: "networkidle", timeout: 30000 });
+
+      if (opts.username && opts.password) {
+        console.log(`🤖 Attempting automated login...`);
+        const userSel = opts.userSelector || 'input[type="email"], input[type="text"], input[name="username"], input[name="login"]';
+        const passSel = opts.passSelector || 'input[type="password"]';
+        const submitSel = opts.submitSelector || 'button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Log in")';
+
+        await loginPage.locator(userSel).first().fill(opts.username);
+        await loginPage.locator(passSel).first().fill(opts.password);
+        
+        await Promise.all([
+          loginPage.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 15000 }).catch(() => {}),
+          loginPage.locator(submitSel).first().click()
+        ]);
+        console.log(`🤖 Automated login form submitted.`);
+      }
+
+      // If interactive verification is needed (no credentials provided, or explicitly running in non-headless)
+      if (!opts.username || !opts.password || opts.headless === false) {
+        console.log(c.cyan + `\n👉 Please complete/verify the login in the browser window.` + c.reset);
+        console.log(c.bold + `👉 Press [Enter] in this terminal once you have successfully logged in...` + c.reset);
+        
+        // Wait for stdin keypress
+        await new Promise(resolve => {
+          process.stdin.once('data', () => {
+            resolve();
+          });
+        });
+      } else {
+        // Wait for a few seconds to let any redirects settle
+        await loginPage.waitForTimeout(5000);
+      }
+      
+      console.log(c.green + `✓ Login session active. Starting crawler...\n` + c.reset);
+    } catch (err) {
+      console.error(c.red + `⚠️ Login failed: ${err.message}` + c.reset);
+    } finally {
+      await loginPage.close();
+    }
+  }
+
+  // Intercept & abort images, fonts, media to speed up crawl (configured after login so login page style is intact)
   await context.route("**/*", (route) => {
     const type = route.request().resourceType();
     if (["image", "font", "media", "stylesheet"].includes(type)) {
