@@ -1,0 +1,21 @@
+name: ddev-playwright
+repository: codingsasi/ddev-playwright
+version: v1.0.9
+dependencies:
+    - ddev/ddev-nvm
+install_date: "2026-05-21T02:23:31+08:00"
+project_files:
+    - config.playwright.yaml
+    - commands/web/playwright
+    - commands/web/install-playwright
+    - commands/web/reinstall-browsers
+    - web-build/Dockerfile.playwright
+    - pw-examples
+global_files: []
+removal_actions:
+    - |
+      #ddev-description:Clean up Playwright installation
+      echo "Playwright addon has been removed."
+      echo "Note: Playwright binaries remain installed in the web container."
+      echo "To completely remove Playwright, you may need to rebuild your web container."
+      rm -rf .ddev/pw-examples

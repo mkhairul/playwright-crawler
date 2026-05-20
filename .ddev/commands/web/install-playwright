@@ -1,0 +1,63 @@
+#!/bin/bash
+#ddev-generated
+## Description: Init Playwright (if needed), install browsers, and mark installation
+## Usage: install-playwright
+## Example: "ddev install-playwright"
+
+set -e
+
+export PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+TEST_DIR="${PLAYWRIGHT_TEST_DIR:-tests}"
+PW_DIR="/var/www/html/${TEST_DIR}/playwright"
+
+# Pin version: normalize for npm (e.g. 1.49 -> 1.49.0)
+VERSION="${PLAYWRIGHT_VERSION:-latest}"
+if [ "${VERSION}" != "latest" ] && printf '%s' "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+$'; then
+  VERSION="${VERSION}.0"
+fi
+
+# ddev-nvm is a dependency; use it
+source ~/.nvm/nvm.sh 2>/dev/null || true
+mkdir -p "${PW_DIR}"
+cd "${PW_DIR}"
+
+# Ensure .nvmrc exists so nvm uses Node 22
+if [ ! -f .nvmrc ]; then
+  echo "22" > .nvmrc
+  echo "Created .nvmrc with Node 22"
+fi
+nvm use 2>/dev/null || nvm install 22
+
+# Init Playwright project if not present: always scaffold with latest, then pin version
+if [ ! -f package.json ]; then
+  echo "Initializing Playwright project (scaffold with latest, pin @playwright/test@${VERSION})..."
+  echo 'n' | npm init playwright@latest -- --quiet --lang=TypeScript --no-browsers
+  npm install -D @playwright/test@${VERSION}
+  # Copy DDEV-optimized config if we have them
+  if [ -f /var/www/html/.ddev/pw-examples/playwright.config.ts ]; then
+    cp /var/www/html/.ddev/pw-examples/playwright.config.ts .
+    mkdir -p tests
+    [ -f /var/www/html/.ddev/pw-examples/global-setup.ts ] && cp /var/www/html/.ddev/pw-examples/global-setup.ts tests/
+    [ -f /var/www/html/.ddev/pw-examples/global-teardown.ts ] && cp /var/www/html/.ddev/pw-examples/global-teardown.ts tests/
+    [ -f /var/www/html/.ddev/pw-examples/example-test.spec.ts ] && cp /var/www/html/.ddev/pw-examples/example-test.spec.ts tests/example.spec.ts 2>/dev/null || true
+  fi
+  echo "Playwright project initialized."
+else
+  echo "Ensuring @playwright/test@${VERSION}..."
+  npm install -D @playwright/test@${VERSION}
+fi
+
+# Install browsers to persistent location (skip if already marked)
+if [ -f /opt/playwright-browsers/.installed ]; then
+  echo "✓ Browsers already installed at /opt/playwright-browsers (use 'ddev reinstall-browsers' to reinstall)"
+else
+  echo "Installing browsers to /opt/playwright-browsers..."
+  npx playwright install chromium firefox webkit
+  touch /opt/playwright-browsers/.installed
+  echo "✓ Browsers installed."
+fi
+
+echo ""
+echo "✓ Playwright is ready. Run tests with: ddev playwright test"
