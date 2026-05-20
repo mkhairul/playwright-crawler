@@ -72,6 +72,48 @@ ddev exec node crawler.js https://playwright-crawler.ddev.site/en-ca/ --same-pat
 ddev exec node crawler.js https://playwright-crawler.ddev.site --max-pages 500 --concurrency 5
 ```
 
+### Crawling Lando / VIP Local Environments from DDEV
+
+When crawling a site running in a **separate Docker environment** (e.g. Lando, VIP Dev Env) from inside your DDEV container, the containers are on **isolated Docker networks** by default and can't reach each other. The `*.lndo.site` hostname resolves to `127.0.0.1` inside DDEV, which is the DDEV container itself — not the Lando proxy.
+
+The included **`connect-vip.sh`** script automates the networking setup:
+
+1. Discovers the VIP dev-env proxy container and its IP
+2. Connects the DDEV container to the VIP proxy's Docker network
+3. Injects an `/etc/hosts` override so `*.lndo.site` hostnames resolve correctly
+
+#### Commands
+
+| Command | Description |
+|---|---|
+| `./connect-vip.sh connect [hostname]` | Set up the bridge (idempotent, safe to re-run) |
+| `./connect-vip.sh disconnect` | Tear down the bridge cleanly |
+| `./connect-vip.sh status [hostname\|url]` | Show connection state and test connectivity |
+| `./connect-vip.sh crawl <url> [opts]` | Connect + run crawler in one step |
+
+#### Examples
+
+```bash
+# One-liner: connect the bridge and crawl
+./connect-vip.sh crawl "https://my-site.vipdev.lndo.site/en-ca/insights" --same-path --max-pages 100
+
+# Or connect first, then crawl separately
+./connect-vip.sh connect my-site.vipdev.lndo.site
+ddev exec node crawler.js "https://my-site.vipdev.lndo.site/en-ca/insights" --same-path
+
+# Check the bridge status (accepts a hostname or full URL)
+./connect-vip.sh status my-site.vipdev.lndo.site
+
+# Tear down when done
+./connect-vip.sh disconnect
+```
+
+> [!NOTE]
+> The `/etc/hosts` entry and Docker network connection are **ephemeral** — they reset on `ddev restart`. Just re-run `./connect-vip.sh connect` to restore them.
+
+> [!IMPORTANT]
+> Both environments must be running before connecting. Start your VIP/Lando environment first, then run `ddev start`, then `./connect-vip.sh connect`.
+
 ### Crawling VIP / Virtual-Host Local Environments
 
 If your local environment uses **virtual hosting** (e.g. WordPress VIP, Lando, or any setup where the server expects a specific `Host` header), you'll get **404 errors** because the server doesn't know which site to serve.
