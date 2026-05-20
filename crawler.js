@@ -14,6 +14,7 @@
  *   --timeout <ms>       Navigation timeout per page (default: 15000)
  *   --no-headless        Show browser window while crawling
  *   --ignore-https-errors Ignore HTTPS/SSL certificate errors (default: true)
+ *   --snapshot-on-timeout Take screenshot & HTML snapshot of pages that timeout (default: false)
  *   --login-url  <url>   Login page URL to authenticate first
  *   --username   <str>   Username / email for automatic login
  *   --password   <str>   Password for automatic login
@@ -43,6 +44,7 @@ function parseArgs() {
     timeout: 15000,
     headless: true,
     ignoreHttpsErrors: true,
+    snapshotOnTimeout: false,
     loginUrl: null,
     username: null,
     password: null,
@@ -66,6 +68,7 @@ function parseArgs() {
       case "--no-headless":  opts.headless    = false; break;
       case "--ignore-https-errors": opts.ignoreHttpsErrors = true; break;
       case "--no-ignore-https-errors": opts.ignoreHttpsErrors = false; break;
+      case "--snapshot-on-timeout": opts.snapshotOnTimeout = true; break;
       case "--login-url":       opts.loginUrl       = args[++i]; break;
       case "--username":        opts.username        = args[++i]; break;
       case "--password":        opts.password        = args[++i]; break;
@@ -262,7 +265,7 @@ function printSummary(results, startMs) {
 //  CSV export
 // ─────────────────────────────────────────────
 function writeCsv(filepath, results) {
-  const header = "index,url,status,title,h1,links_found,load_ms,redirect_url\n";
+  const header = "index,url,status,title,h1,links_found,load_ms,redirect_url,error,snapshot_path\n";
   const rows = results.map((r, i) => {
     const esc = (s) => `"${String(s || "").replace(/"/g, '""')}"`;
     return [
@@ -274,6 +277,8 @@ function writeCsv(filepath, results) {
       r.linksFound,
       r.loadMs,
       esc(r.redirectUrl),
+      esc(r.error),
+      esc(r.snapshotPath),
     ].join(",");
   });
   fs.writeFileSync(filepath, header + rows.join("\n"), "utf8");
@@ -283,7 +288,7 @@ function writeCsv(filepath, results) {
 // ─────────────────────────────────────────────
 //  Core crawl logic
 // ─────────────────────────────────────────────
-async function crawlPage(page, pageUrl, timeout) {
+async function crawlPage(page, pageUrl, opts) {
   const result = {
     url: pageUrl,
     status: null,
@@ -301,7 +306,7 @@ async function crawlPage(page, pageUrl, timeout) {
   try {
     response = await page.goto(pageUrl, {
       waitUntil: "domcontentloaded",
-      timeout,
+      timeout: opts.timeout,
     });
 
     result.status      = response?.status() ?? null;
@@ -326,6 +331,34 @@ async function crawlPage(page, pageUrl, timeout) {
   } catch (err) {
     result.loadMs = Date.now() - t0;
     result.error  = err.message;
+
+    // Handle timeout snapshot if enabled
+    if (opts.snapshotOnTimeout && err.message.toLowerCase().includes("timeout")) {
+      try {
+        const dir = path.join(process.cwd(), "timeouts");
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+
+        const urlObj = new URL(pageUrl);
+        const safePath = urlObj.pathname.replace(/[^a-z0-9]/gi, "_").slice(0, 50);
+        const filename = `timeout_${Date.now()}_${urlObj.hostname}${safePath}`;
+
+        const screenshotPath = path.join(dir, `${filename}.png`);
+        await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+
+        const htmlPath = path.join(dir, `${filename}.html`);
+        const content = await page.content().catch(() => "");
+        if (content) {
+          fs.writeFileSync(htmlPath, content, "utf8");
+        }
+
+        result.snapshotPath = screenshotPath;
+        result.htmlPath = htmlPath;
+      } catch (snapErr) {
+        // Fail silently to keep crawler stable
+      }
+    }
   }
 
   return result;
@@ -396,8 +429,34 @@ async function main() {
       console.log(c.green + `✓ Login session active. Starting crawler...\n` + c.reset);
     } catch (err) {
       console.error(c.red + `⚠️ Login failed: ${err.message}` + c.reset);
+
+      if (opts.snapshotOnTimeout) {
+        try {
+          const dir = path.join(process.cwd(), "timeouts");
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          const filename = `login_failure_${Date.now()}`;
+          const screenshotPath = path.join(dir, `${filename}.png`);
+          await loginPage.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+
+          const htmlPath = path.join(dir, `${filename}.html`);
+          const content = await loginPage.content().catch(() => "");
+          if (content) {
+            fs.writeFileSync(htmlPath, content, "utf8");
+          }
+          console.log(c.yellow + `📸 Saved login failure snapshots to:\n   - ${screenshotPath}\n   - ${htmlPath}` + c.reset);
+        } catch (snapErr) {
+          // Fail silently
+        }
+      }
+
+      console.error(c.red + `\nFatal: Crawl aborted because login failed. Please verify your login credentials, selectors, or network connection.\n` + c.reset);
+      await loginPage.close().catch(() => {});
+      await browser.close().catch(() => {});
+      process.exit(1);
     } finally {
-      await loginPage.close();
+      await loginPage.close().catch(() => {});
     }
   }
 
@@ -426,7 +485,7 @@ async function main() {
       if (!pageUrl) break;
 
       const page   = await context.newPage();
-      const result = await crawlPage(page, pageUrl, opts.timeout);
+      const result = await crawlPage(page, pageUrl, opts);
       await page.close();
 
       results.push(result);

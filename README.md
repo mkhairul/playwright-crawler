@@ -100,6 +100,10 @@ node crawler.js https://example.com/dashboard \
   --submit-selector "button.submit-btn"
 ```
 
+> [!IMPORTANT]
+> **Login Failures**: If the login step fails (due to invalid credentials, selectors not found, or navigation timeouts), the crawler will automatically **abort** the crawl immediately to prevent running an unauthenticated scan.
+> If `--snapshot-on-timeout` is enabled, it will save screenshot and HTML snapshots of the login page inside the `timeouts/` directory for visual troubleshooting.
+
 ---
 
 ## Options
@@ -117,6 +121,7 @@ node crawler.js https://example.com/dashboard \
 | `--no-headless`        | —       | Show the browser window while crawling              |
 | `--ignore-https-errors`| `true`  | Ignore SSL/HTTPS certificate errors                |
 | `--no-ignore-https-errors`| —    | Force SSL/HTTPS certificate validation             |
+| `--snapshot-on-timeout`| `false` | Take screenshot & HTML snapshot on timeouts         |
 | `--login-url <url>`    | —       | URL of the login page to authenticate first         |
 | `--username <str>`     | —       | Username / Email for automated login                |
 | `--password <str>`     | —       | Password for automated login                        |
@@ -173,6 +178,8 @@ Auto-saved to `crawl-report-<timestamp>.csv` with these columns:
 | `links_found`  | Number of `<a href>` links on page  |
 | `load_ms`      | Page load time (ms)                 |
 | `redirect_url` | Final URL if redirect occurred      |
+| `error`        | Error message if page crawl failed  |
+| `snapshot_path`| Path to timeout snapshot if taken   |
 
 ---
 
