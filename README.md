@@ -72,6 +72,26 @@ ddev exec node crawler.js https://playwright-crawler.ddev.site/en-ca/ --same-pat
 ddev exec node crawler.js https://playwright-crawler.ddev.site --max-pages 500 --concurrency 5
 ```
 
+### Crawling VIP / Virtual-Host Local Environments
+
+If your local environment uses **virtual hosting** (e.g. WordPress VIP, Lando, or any setup where the server expects a specific `Host` header), you'll get **404 errors** because the server doesn't know which site to serve.
+
+Use `--host-header` to send the correct hostname:
+
+```bash
+# VIP local dev — server is on localhost:8080 but expects "mysite.com" as the Host
+node crawler.js http://localhost:8080 --host-header "mysite.com"
+
+# WordPress VIP with a custom domain mapping
+node crawler.js http://localhost:8080/en-ca/ --host-header "mysite.com" --same-path
+
+# If you need additional custom headers (e.g. auth tokens, X-Forwarded headers)
+node crawler.js http://localhost:8080 --host-header "mysite.com" --extra-headers '{"X-Forwarded-Proto":"https"}'
+```
+
+> [!TIP]
+> **How it works**: The `--host-header` flag sets the HTTP `Host` header on every request the crawler makes. This tells the local server which virtual host to serve, just like when you browse via a domain name. This is similar to adding an entry to your `/etc/hosts` file, but without modifying your system.
+
 ### Crawling Authenticated Sites (Login)
 
 You can crawl pages behind a login screen using either **Interactive/Manual** login or **Automated** login. Because pages in the same session share cookies and local storage, once logged in, the entire crawler will access the protected pages.
@@ -108,26 +128,28 @@ node crawler.js https://example.com/dashboard \
 
 ## Options
 
-| Flag                   | Default | Description                                         |
-|------------------------|---------|-----------------------------------------------------|
-| `--max-pages <n>`      | `200`   | Stop after crawling n pages                         |
-| `--concurrency <n>`    | `3`     | Number of parallel browser tabs                     |
-| `--same-domain`        | `true`  | Only follow links on the same domain                |
-| `--no-same-domain`     | —       | Follow all links regardless of domain               |
-| `--same-path`          | `false` | Only follow links under starting URL's path/region  |
-| `--include-ext`        | —       | Extra file extensions to crawl (e.g. `.php,.asp`)   |
-| `--output <file>`      | auto    | Write CSV report to this filename                   |
-| `--timeout <ms>`       | `15000` | Navigation timeout per page (milliseconds)          |
-| `--no-headless`        | —       | Show the browser window while crawling              |
-| `--ignore-https-errors`| `true`  | Ignore SSL/HTTPS certificate errors                |
-| `--no-ignore-https-errors`| —    | Force SSL/HTTPS certificate validation             |
-| `--snapshot-on-timeout`| `false` | Take screenshot & HTML snapshot on timeouts         |
-| `--login-url <url>`    | —       | URL of the login page to authenticate first         |
-| `--username <str>`     | —       | Username / Email for automated login                |
-| `--password <str>`     | —       | Password for automated login                        |
-| `--user-selector <sel>`| —       | Custom CSS selector for username input field        |
-| `--pass-selector <sel>`| —       | Custom CSS selector for password input field        |
-| `--submit-selector <sel>`| —       | Custom CSS selector for the login submit button     |
+| Flag                      | Default | Description                                         |
+|---------------------------|---------|-----------------------------------------------------|
+| `--max-pages <n>`         | `200`   | Stop after crawling n pages                         |
+| `--concurrency <n>`       | `3`     | Number of parallel browser tabs                     |
+| `--same-domain`           | `true`  | Only follow links on the same domain                |
+| `--no-same-domain`        | —       | Follow all links regardless of domain               |
+| `--same-path`             | `false` | Only follow links under starting URL's path/region  |
+| `--include-ext`           | —       | Extra file extensions to crawl (e.g. `.php,.asp`)   |
+| `--output <file>`         | auto    | Write CSV report to this filename                   |
+| `--timeout <ms>`          | `15000` | Navigation timeout per page (milliseconds)          |
+| `--no-headless`           | —       | Show the browser window while crawling              |
+| `--ignore-https-errors`   | `true`  | Ignore SSL/HTTPS certificate errors                 |
+| `--no-ignore-https-errors`| —       | Force SSL/HTTPS certificate validation              |
+| `--snapshot-on-timeout`   | `false` | Take screenshot & HTML snapshot on timeouts          |
+| `--host-header <host>`    | —       | Override Host header (for VIP/vhost local envs)      |
+| `--extra-headers <json>`  | —       | Extra HTTP headers as JSON string                    |
+| `--login-url <url>`       | —       | URL of the login page to authenticate first          |
+| `--username <str>`        | —       | Username / Email for automated login                 |
+| `--password <str>`        | —       | Password for automated login                         |
+| `--user-selector <sel>`   | —       | Custom CSS selector for username input field         |
+| `--pass-selector <sel>`   | —       | Custom CSS selector for password input field         |
+| `--submit-selector <sel>` | —       | Custom CSS selector for the login submit button      |
 
 ---
 

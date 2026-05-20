@@ -15,6 +15,9 @@
  *   --no-headless        Show browser window while crawling
  *   --ignore-https-errors Ignore HTTPS/SSL certificate errors (default: true)
  *   --snapshot-on-timeout Take screenshot & HTML snapshot of pages that timeout (default: false)
+ *   --host-header <host>  Override Host header (for VIP/vhost local envs)
+ *   --extra-headers <json> Extra HTTP headers as JSON string
+ *   --user-agent  <str>   Override the browser User-Agent string
  *   --login-url  <url>   Login page URL to authenticate first
  *   --username   <str>   Username / email for automatic login
  *   --password   <str>   Password for automatic login
@@ -45,6 +48,9 @@ function parseArgs() {
     headless: true,
     ignoreHttpsErrors: true,
     snapshotOnTimeout: false,
+    hostHeader: null,
+    extraHeaders: null,
+    userAgent: null,
     loginUrl: null,
     username: null,
     password: null,
@@ -69,6 +75,9 @@ function parseArgs() {
       case "--ignore-https-errors": opts.ignoreHttpsErrors = true; break;
       case "--no-ignore-https-errors": opts.ignoreHttpsErrors = false; break;
       case "--snapshot-on-timeout": opts.snapshotOnTimeout = true; break;
+      case "--host-header":    opts.hostHeader    = args[++i]; break;
+      case "--extra-headers":  try { opts.extraHeaders = JSON.parse(args[++i]); } catch(e) { console.error("--extra-headers must be valid JSON"); process.exit(1); } break;
+      case "--user-agent":     opts.userAgent     = args[++i]; break;
       case "--login-url":       opts.loginUrl       = args[++i]; break;
       case "--username":        opts.username        = args[++i]; break;
       case "--password":        opts.password        = args[++i]; break;
@@ -379,11 +388,29 @@ async function main() {
   printHeader(opts.startUrl);
 
   const browser = await chromium.launch({ headless: opts.headless });
-  const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (compatible; PlaywrightSEOSpider/1.0; +https://github.com/playwright)",
+
+  // Build extra HTTP headers (for VIP / virtual-host local environments)
+  const extraHTTPHeaders = {};
+  if (opts.hostHeader) {
+    extraHTTPHeaders["Host"] = opts.hostHeader;
+    console.log(c.dim + `  Host header override: ${opts.hostHeader}` + c.reset);
+  }
+  if (opts.extraHeaders) {
+    Object.assign(extraHTTPHeaders, opts.extraHeaders);
+    console.log(c.dim + `  Extra headers: ${JSON.stringify(opts.extraHeaders)}` + c.reset);
+  }
+
+  const defaultUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+
+  const contextOpts = {
+    userAgent: opts.userAgent || defaultUA,
     ignoreHTTPSErrors: opts.ignoreHttpsErrors,
-  });
+  };
+  if (Object.keys(extraHTTPHeaders).length > 0) {
+    contextOpts.extraHTTPHeaders = extraHTTPHeaders;
+  }
+
+  const context = await browser.newContext(contextOpts);
 
   // ─────────────────────────────────────────────
   //  Optional Authentication / Login Step
